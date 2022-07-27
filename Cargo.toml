@@ -19,5 +19,6 @@ keywords = ["rust in action", "rust ..."]
 
 [workspace]
 members = [
-    "basics"
+    "basics",
+    "httpie"
 ]
