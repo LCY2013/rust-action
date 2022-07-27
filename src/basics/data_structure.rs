@@ -5,27 +5,27 @@
 // 定义一个聊天服务的数据结构
 
 #[derive(Debug)]
-enum Gender {
+pub(crate) enum Gender {
     Unspecified = 0,
     Female = 1,
     Male = 2,
 }
 
 #[derive(Debug, Copy, Clone)]
-struct UserId(u64);
+pub(crate) struct UserId(u64);
 
 #[derive(Debug, Copy, Clone)]
-struct TopicId(u64);
+pub(crate) struct TopicId(u64);
 
 #[derive(Debug)]
-struct User {
+pub(crate) struct User {
     id: UserId,
     name: String,
     gender: Gender,
 }
 
 #[derive(Debug)]
-struct Topic {
+pub(crate) struct Topic {
     id: TopicId,
     name: String,
     owner: UserId,
@@ -33,7 +33,7 @@ struct Topic {
 
 // 定义聊天室发生的事件
 #[derive(Debug)]
-enum Event {
+pub(crate) enum Event {
     Join((UserId, TopicId)),
     Leave((UserId, TopicId)),
     Message((UserId, TopicId, String)),
@@ -56,8 +56,8 @@ fn main() {
         name: "rust".into(),
         owner: UserId(1),
     };
-    let event1 = Event::Join((alice, topic));
-    let event2 = Event::Join((bob, topic));
+    let event1 = Event::Join((alice.id, topic.id));
+    let event2 = Event::Join((bob.id, topic.id));
     let event3 = Event::Message((alice.id, topic.id, "Hello, World!".into()));
 
     println!(
