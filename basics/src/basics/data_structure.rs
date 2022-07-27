@@ -5,27 +5,27 @@
 // 定义一个聊天服务的数据结构
 
 #[derive(Debug)]
-pub(crate) enum Gender {
+pub enum Gender {
     Unspecified = 0,
     Female = 1,
     Male = 2,
 }
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct UserId(u64);
+pub struct UserId(u64);
 
 #[derive(Debug, Copy, Clone)]
-pub(crate) struct TopicId(u64);
+pub struct TopicId(u64);
 
 #[derive(Debug)]
-pub(crate) struct User {
+pub struct User {
     id: UserId,
     name: String,
     gender: Gender,
 }
 
 #[derive(Debug)]
-pub(crate) struct Topic {
+pub struct Topic {
     id: TopicId,
     name: String,
     owner: UserId,
@@ -33,7 +33,7 @@ pub(crate) struct Topic {
 
 // 定义聊天室发生的事件
 #[derive(Debug)]
-pub(crate) enum Event {
+pub enum Event {
     Join((UserId, TopicId)),
     Leave((UserId, TopicId)),
     Message((UserId, TopicId, String)),

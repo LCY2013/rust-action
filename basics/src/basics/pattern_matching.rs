@@ -1,6 +1,6 @@
 // Rust 的模式匹配吸取了函数式编程语言的优点，强大优雅且效率很高。
 // 它可以用于 struct / enum 中匹配部分或者全部内容，比如上文中我们设计的数据结构 Event，可以这样匹配。
-use crate::basics::data_structure::Event;
+use basics::::data_structure::Event;
 
 fn process_event(event: &Event) {
    match event {
