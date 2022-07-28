@@ -4,10 +4,10 @@ fn closure() {
     let a = "hello";
     let b = "Tyr";
 
-    /*let c = !msg: &str| {
+    let c = |msg: &str| {
         println!("{}{}:{}",a,b,msg);
-    };*/
+    };
 
-    /*c("How are you?")*/
+    c("How are you?")
 }
 // 接口与虚表
