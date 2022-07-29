@@ -56,3 +56,12 @@ fn main() {
 // cargo build --quiet && ../target/debug/httpie post httpbin.org/post a=1 b=2
 // Opts { subcmd: Post(Post { url: "httpbin.org/post", body: ["a=1", "b=2"] }) }
 // ../target/debug/httpie --help
+
+// 默认情况下，cargo build 编译出来的二进制，在项目根目录的 target/debug 下。可以看到，命令行解析成功。
+
+// 《加入校验信息》
+// 一是验证 URL，另一个是验证 body。
+
+
+
+
