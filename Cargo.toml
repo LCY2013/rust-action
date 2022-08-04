@@ -18,5 +18,6 @@
 [workspace]
 members = [
     "basics",
-    "httpie"
+    "httpie",
+    "thumbor"
 ]
