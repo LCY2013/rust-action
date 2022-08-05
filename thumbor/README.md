@@ -397,7 +397,251 @@ fn print_test_url(url: &str) {
 
 > RUST_LOG=info cargo run --quiet
 
+## 图片处理
+接下来就可以处理图片了，Rust 下有一个不错的、偏底层的 image 库，围绕它有很多上层的库，包括今天要使用 photon_rs。
 
+扫了一下它的源代码，感觉它不算一个特别优秀的库，内部有太多无谓的内存拷贝，所以性能还有不少提升空间。
 
+就算如此，从 photon_rs 自己的 benchmark 看，也比 PIL / ImageMagick 性能好太多，这也算是 Rust 性能强大的一个小小佐证吧。
 
- 
+因为 photo_rs 使用简单，这里也不太关心更高的性能，就暂且用它。然而，作为一个有追求的开发者，知道，有朝一日可能要用不同的 image 引擎替换它，所以设计一个 Engine trait：
+```rust
+// Engine trait：未来可以添加更多的 engine，主流程只需要替换 engine
+pub trait Engine {
+    // 对 engine 按照 specs 进行一系列有序的处理
+    fn apply(&mut self, specs: &[Spec]);
+    // 从 engine 中生成目标图片，注意这里用的是 self，而非 self 的引用
+    fn generate(self, format: ImageOutputFormat) -> Vec<u8>;
+}
+```
+
+它提供两个方法，apply 方法对 engine 按照 specs 进行一系列有序的处理，generate 方法从 engine 中生成目标图片。
+
+那么 apply 方法怎么实现呢？可以再设计一个 trait，这样可以为每个 Spec 生成对应处理：
+```rust
+// SpecTransform：未来如果添加更多的 spec，只需要实现它即可
+pub trait SpecTransform<T> {
+    // 对图片使用 op 做 transform
+    fn transform(&mut self, op: T);
+}
+```
+
+创建 src/engine 目录，并添加 src/engine/mod.rs，在这个文件里添加对 trait 的定义：
+```rust
+use crate::pb::Spec;
+use image::ImageOutputFormat;
+mod photon;
+pub use photon::Photon;
+// Engine trait：未来可以添加更多的 engine，主流程只需要替换 engine
+pub trait Engine {
+    // 对 engine 按照 specs 进行一系列有序的处理
+    fn apply(&mut self, specs: &[Spec]);
+    // 从 engine 中生成目标图片，注意这里用的是 self，而非 self 的引用
+    fn generate(self, format: ImageOutputFormat) -> Vec<u8>;
+}
+// SpecTransform：未来如果添加更多的 spec，只需要实现它即可
+pub trait SpecTransform<T> {
+    // 对图片使用 op 做 transform
+    fn transform(&mut self, op: T);
+}
+```
+
+接下来生成一个文件 src/engine/photon.rs，对 photon 实现 Engine trait。
+```rust
+use super::{Engine, SpecTransform};
+use crate::pb::*;
+use anyhow::Result;
+use bytes::Bytes;
+use image::{DynamicImage, ImageBuffer, ImageOutputFormat};
+use lazy_static::lazy_static;
+use photon_rs::{
+    effects, filters, multiple, native::open_image_from_bytes, transform, PhotonImage,
+};
+use std::convert::TryFrom;
+lazy_static! {
+    // 预先把水印文件加载为静态变量
+    static ref WATERMARK: PhotonImage = {
+        // 这里你需要把我 github 项目下的对应图片拷贝到你的根目录
+        // 在编译的时候 include_bytes! 宏会直接把文件读入编译后的二进制
+        let data = include_bytes!("../../rust- .png");
+        let watermark = open_image_from_bytes(data).unwrap();
+        transform::resize(&watermark, 64, 64, transform::SamplingFilter::Nearest)
+    };
+}
+// 我们目前支持 Photon engine
+pub struct Photon(PhotonImage);
+// 从 Bytes 转换成 Photon 结构
+impl TryFrom<Bytes> for Photon {
+    type Error = anyhow::Error;
+    fn try_from(data: Bytes) -> Result<Self, Self::Error> {
+        Ok(Self(open_image_from_bytes(&data)?))
+    }
+}
+impl Engine for Photon {
+    fn apply(&mut self, specs: &[Spec]) {
+        for spec in specs.iter() {
+            match spec.data {
+                Some(spec::Data::Crop(ref v)) => self.transform(v),
+                Some(spec::Data::Contrast(ref v)) => self.transform(v),
+                Some(spec::Data::Filter(ref v)) => self.transform(v),
+                Some(spec::Data::Fliph(ref v)) => self.transform(v),
+                Some(spec::Data::Flipv(ref v)) => self.transform(v),
+                Some(spec::Data::Resize(ref v)) => self.transform(v),
+                Some(spec::Data::Watermark(ref v)) => self.transform(v),
+                // 对于目前不认识的 spec，不做任何处理
+                _ => {}
+            }
+        }
+    }
+    fn generate(self, format: ImageOutputFormat) -> Vec<u8> {
+        image_to_buf(self.0, format)
+    }
+}
+impl SpecTransform<&Crop> for Photon {
+    fn transform(&mut self, op: &Crop) {
+        let img = transform::crop(&mut self.0, op.x1, op.y1, op.x2, op.y2);
+        self.0 = img;
+    }
+}
+impl SpecTransform<&Contrast> for Photon {
+    fn transform(&mut self, op: &Contrast) {
+        effects::adjust_contrast(&mut self.0, op.contrast);
+    }
+}
+impl SpecTransform<&Flipv> for Photon {
+    fn transform(&mut self, _op: &Flipv) {
+        transform::flipv(&mut self.0)
+    }
+}
+impl SpecTransform<&Fliph> for Photon {
+    fn transform(&mut self, _op: &Fliph) {
+        transform::fliph(&mut self.0)
+    }
+}
+impl SpecTransform<&Filter> for Photon {
+    fn transform(&mut self, op: &Filter) {
+        match filter::Filter::from_i32(op.filter) {
+            Some(filter::Filter::Unspecified) => {}
+            Some(f) => filters::filter(&mut self.0, f.to_str().unwrap()),
+            _ => {}
+        }
+    }
+}
+impl SpecTransform<&Resize> for Photon {
+    fn transform(&mut self, op: &Resize) {
+        let img = match resize::ResizeType::from_i32(op.rtype).unwrap() {
+            resize::ResizeType::Normal => transform::resize(
+                &mut self.0,
+                op.width,
+                op.height,
+                resize::SampleFilter::from_i32(op.filter).unwrap().into(),
+            ),
+            resize::ResizeType::SeamCarve => {
+                transform::seam_carve(&mut self.0, op.width, op.height)
+            }
+        };
+        self.0 = img;
+    }
+}
+impl SpecTransform<&Watermark> for Photon {
+    fn transform(&mut self, op: &Watermark) {
+        multiple::watermark(&mut self.0, &WATERMARK, op.x, op.y);
+    }
+}
+// photon 库竟然没有提供在内存中对图片转换格式的方法，只好手工实现
+fn image_to_buf(img: PhotonImage, format: ImageOutputFormat) -> Vec<u8> {
+    let raw_pixels = img.get_raw_pixels();
+    let width = img.get_width();
+    let height = img.get_height();
+    let img_buffer = ImageBuffer::from_vec(width, height, raw_pixels).unwrap();
+    let dynimage = DynamicImage::ImageRgba8(img_buffer);
+    let mut buffer = Vec::with_capacity(32768);
+    dynimage.write_to(&mut buffer, format).unwrap();
+    buffer
+}
+```
+图片处理引擎就搞定了，这里用了一个水印图片，同样把 engine  模块加入 main.rs，并引入 Photon：
+```rust
+mod engine;
+use engine::{Engine, Photon};
+use image::ImageOutputFormat;
+```
+
+还记得 src/main.rs 的代码中，留了一个 TODO 么？
+```
+//TODO: 处理图片信息
+let mut headers = HeaderMap::new();
+headers.insert("content-type", HeaderValue::from_static("image/jpeg"));
+Ok((headers, data.to_vec()))
+```
+
+把这段替换掉，使用刚才写好的 Photon 引擎处理：
+```text
+// 使用 image engine 处理
+let mut engine: Photon = data
+    .try_into()
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+engine.apply(&spec.specs);
+let image = engine.generate(ImageOutputFormat::Jpeg(85));
+info!("Finished processing: image size {}", image.len());
+let mut headers = HeaderMap::new();
+headers.insert("content-type", HeaderValue::from_static("image/jpeg"));
+Ok((headers, image))
+```
+
+在网上随手找了一张图片来测试下效果。用  cargo build --release 编译 thumbor 项目，然后打开日志运行：
+> RUST_LOG=info target/release/thumbor
+
+打开测试链接，在浏览器中可以看到左下角的处理后图片
+> http://localhost:3000/image/CgoKCAj0AxCgBiADCgY6BAgyEDIKBDICCAM/https%3A%2F%2Fimages%2Epexels%2Ecom%2Fphotos%2F1562477%2Fpexels%2Dphoto%2D1562477%2Ejpeg%3Fauto%3Dcompress%26cs%3Dtinysrgb%26dpr%3D3%26h%3D750%26w%3D1260
+
+```text
+fufeng@magic ~/s/r/p/rust-action>RUST_LOG=info target/release/thumbor                                                                                130 master!+
+test url: http://localhost:3000/image/CgoKCAj0AxCgBiADCgY6BAgyEDIKBDICCAM/https%3A%2F%2Fimages%2Epexels%2Ecom%2Fphotos%2F1562477%2Fpexels%2Dphoto%2D1562477%2Ejpeg%3Fauto%3Dcompress%26cs%3Dtinysrgb%26dpr%3D3%26h%3D750%26w%3D1260
+2022-08-05T07:24:17.380358Z  INFO retrieve_image{url="https://images.pexels.com/photos/1562477/pexels-photo-1562477.jpeg?auto=compress&cs=tinysrgb&dpr=3&h=750&w=1260"}: thumbor: Retrieve url
+2022-08-05T07:24:20.192044Z  INFO thumbor: Finished processing: image size 52314
+2022-08-05T07:24:27.983114Z  INFO retrieve_image{url="https://images.pexels.com/photos/1562477/pexels-photo-1562477.jpeg?auto=compress&cs=tinysrgb&dpr=3&h=750&w=1260"}: thumbor: Match cache 13782279907884137652
+2022-08-05T07:24:28.306702Z  INFO thumbor: Finished processing: image size 52314
+```
+
+这个版本目前是一个没有详细优化过的版本，性能已经足够好。而且，像 Thumbor 这样的图片服务，前面还有 CDN（Content Distribution Network）扛压力，只有 CDN 需要回源时，才会访问到，所以也可以不用太优化。
+
+如果不算 protobuf 生成的代码，Thumbor 这个项目，到目前为止写了 318 行代码：
+> tokei src/main.rs src/engine/* src/pb/mod.rs
+
+```text
+fufeng@magic ~/s/r/p/r/thumbor>tokei src/main.rs src/engine/* src/pb/mod.rs                                                                              master!+
+===============================================================================
+ Language            Files        Lines         Code     Comments       Blanks
+===============================================================================
+ Rust                    4          402          318           29           55
+===============================================================================
+ Total                   4          402          318           29           55
+===============================================================================
+```
+
+三百多行代码就把一个图片服务器的核心部分搞定了，不仅如此，还充分考虑到了架构的可扩展性，用 trait 实现了主要的图片处理流程，并且引入了缓存来避免不必要的网络请求。虽然比我们预期的 200 行代码多了 50% 的代码量，但我相信它进一步佐证了 Rust 强大的表达能力。
+
+而且，通过合理使用 protobuf 定义接口和使用 trait 做图片引擎，未来添加新的功能非常简单，可以像搭积木一样垒上去，不会影响已有的功能，完全符合开闭原则（Open-Closed Principle）。
+
+## 结尾
+作为一门系统级语言，Rust 使用独特的内存管理方案，零成本地帮我们管理内存；作为一门高级语言，Rust 提供了足够强大的类型系统和足够完善的标准库，帮我们很容易写出低耦合、高内聚的代码。
+
+通过 Engine trait 分离了具体的图片处理引擎和主流程，让主流程变得干净清爽；同时在处理 protobuf 生成的数据结构时，大量使用了 From/ TryFromtrait 做数据类型的转换，也是一种解耦（关注点分离）的思路。
+
+听我讲得这么流畅，你是不是觉得我写的时候肯定不会犯错。其实并没有，我在用 axum 写源图获取的流程时，就因为使用 Mutex 的错误而被编译器毒打，花了些时间才解决。
+
+但这种毒打是非常让人心悦诚服且快乐的，因为我知道，这样的并发问题一旦泄露到生产环境，解决起来大概率会毫无头绪，只能一点点试错可能有问题的代码，那个时候代价就远非和编译器搏斗的这十来分钟可比了。
+
+所以只要你入了门，写 Rust 代码的过程绝对是一种享受，绝大多数错误在编译时就被揪出来了，你的代码只要编译能通过，基本上不需要担心它运行时的正确性。
+
+## 图片处理库
+- 你可以直接在 image 库上实现
+
+- 使用 imagemagick: https://github.com/nlfiedler/magick-rust
+
+- 使用 opencv: https://github.com/twistedfall/opencv-rust
+
+- 使用 piet: https://github.com/linebender/piet
+
+- 或者任何 C/C++ image 库（需要做一下 rust binding）
