@@ -1,3 +1,9 @@
+pub mod basics;
+pub mod engineering;
+
+use basics::io::*;
+use basics::*;
+
 // cargo run -- https://www.rust-lang.org rust.md, 命令行信息
 fn main() {
     println!("Hello, world!");
@@ -9,4 +15,9 @@ fn main() {
     for arg in std::env::args() {
         println!("{}", arg);
     }
+
+    guess();
+
+    rand();
+
 }
