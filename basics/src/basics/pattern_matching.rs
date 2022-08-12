@@ -3,20 +3,19 @@
 use crate::basics::data_structure::Event;
 
 fn process_event(event: &Event) {
-   match event {
-       Event::Join((uid, _tid)) => println!("user {:?} joined", uid),
-       Event::Leave((uid, tid)) => println!("user {:?} left {:?}",uid,tid),
-       Event::Message((_,_,msg)) => println!("broadcast: {}", msg),
-   }
+    match event {
+        Event::Join((uid, _tid)) => println!("user {:?} joined", uid),
+        Event::Leave((uid, tid)) => println!("user {:?} left {:?}", uid, tid),
+        Event::Message((_, _, msg)) => println!("broadcast: {}", msg),
+    }
 }
 
 // 从代码中可以看到，可以直接对 enum 内层的数据进行匹配并赋值，这比很多只支持简单模式匹配的语言，例如 JavaScript 、Python ，可以省出好几行代码。
 // 除了使用 match 关键字做模式匹配外，我们还可以用 if let / while let 做简单的匹配，如果上面的代码我们只关心 Event::Message，可以这么写：
 fn process_event_message(event: &Event) {
-    if let Event::Message((_,_,msg)) = event {
+    if let Event::Message((_, _, msg)) = event {
         println!("broadcast: {}", msg)
     }
 }
 
 // Rust 的模式匹配是一个很重要的语言特性，被广泛应用在状态机处理、消息处理和错误处理中，如果你之前使用的语言是 C / Java / Python / JavaScript ，没有强大的模式匹配支持。
-

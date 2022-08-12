@@ -17,10 +17,10 @@ mod tests {
 
 #[cfg(test)]
 mod tests {
-   #[test]
-   fn it_works() {
-       assert_eq!(2+ 2, 4)
-   }
+    #[test]
+    fn it_works() {
+        assert_eq!(2 + 2, 4)
+    }
 }
 
 // 集成测试一般放在 tests 目录下，和 src 平行。和单元测试不同，集成测试只能测试 crate 下的公开接口，编译时编译成单独的可执行文件。

@@ -1,5 +1,5 @@
 // 在 Rust 下，函数是一等公民，可以作为参数或者返回值。我们来看一个函数作为参数的例子
-fn apply(value: i32,f: fn(i32) -> i32) -> i32 {
+fn apply(value: i32, f: fn(i32) -> i32) -> i32 {
     f(value)
 }
 
@@ -18,6 +18,6 @@ Rust 函数参数的类型和返回值的类型都必须显式定义，如果没
 如果最后一个表达式后添加了; 分号，隐含其返回值为 unit。
  */
 fn main() {
-    println!("apply square: {}", apply(2,square));
-    println!("apply cube: {}", apply(2,cube));
+    println!("apply square: {}", apply(2, square));
+    println!("apply cube: {}", apply(2, cube));
 }
