@@ -3,6 +3,25 @@ use io::stdin;
 use std::cmp::Ordering;
 use rand::Rng;
 
+pub fn guess_convert() {
+    let secret_number = rand::thread_rng().gen_range(1..100);
+
+    println!("Guess the number！");
+    let mut guess = String::new();
+    stdin().read_line(&mut guess)
+        .expect("Error reading line");
+
+    // 类型转换
+    let guess: u32 = guess.trim().parse()
+        .expect("Please enter a number");
+
+    match guess.cmp(&secret_number) {
+        Ordering::Less => println!("Too small!"),
+        Ordering::Greater => println!("Too big!"),
+        Ordering::Equal => println!("You wind!"),
+    }
+}
+
 pub fn guess_tips() {
     let secret_number = rand::thread_rng().gen_range(1..101).to_string();
 

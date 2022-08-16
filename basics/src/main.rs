@@ -23,6 +23,9 @@ fn main() {
     //rand();
 
     // 猜数字比较
-    guess_tips();
+    //guess_tips();
+
+    // 猜数字，类型转换
+    guess_convert();
 
 }
