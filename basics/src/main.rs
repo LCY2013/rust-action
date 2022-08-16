@@ -26,6 +26,8 @@ fn main() {
     //guess_tips();
 
     // 猜数字，类型转换
-    guess_convert();
+    //guess_convert();
 
+    // 猜数字，循环结构
+    guess_loop()
 }
