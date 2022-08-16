@@ -16,8 +16,13 @@ fn main() {
         println!("{}", arg);
     }
 
-    guess();
+    // 猜数字
+    //guess();
 
-    rand();
+    // 随机数
+    //rand();
+
+    // 猜数字比较
+    guess_tips();
 
 }
