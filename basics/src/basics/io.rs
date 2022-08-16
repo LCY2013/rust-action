@@ -5,13 +5,19 @@ use rand::Rng;
 
 pub fn guess_convert() {
     let secret_number = rand::thread_rng().gen_range(1..100);
+    println!("This secret number is: {:?}", secret_number);
 
-    println!("Guess the number！");
+    println!("Guess the number：");
     let mut guess = String::new();
     stdin().read_line(&mut guess)
         .expect("Error reading line");
 
     // 类型转换
+    // guess.trim().parse() 表达式上。表达式中的 guess 是包含输入的原 始 String 类型。
+    // String 实例的 trim 方法会去除字符串开头和结尾的空白字符。
+    // u32 只 能由数字字符转换，不过用户必须输入 enter 键才能让 read_line 返回，然而用户按下 enter 键时，会在字符串中增加一个换行（newline）符。
+    // 例如，用户输入 5 并按下 enter， guess 看起来像这样： 5\n 。
+    // \n 代表 “换行”，回车键。 trim 方法消除 \n ，只留下 5 。
     let guess: u32 = guess.trim().parse()
         .expect("Please enter a number");
 
