@@ -29,5 +29,8 @@ fn main() {
     //guess_convert();
 
     // 猜数字，循环结构
-    guess_loop()
+    //guess_loop();
+
+    // 猜数字，健壮性
+    guess_robustness();
 }
