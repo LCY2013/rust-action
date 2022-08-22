@@ -1,0 +1,867 @@
+## SQL
+工作的时候经常会跟各种数据源打交道，数据源包括数据库、Parquet、CSV、JSON 等，而打交道的过程无非是：数据的获取（fetch）、过滤（filter）、投影（projection）和排序（sort）。
+
+做大数据的同学可以用类似 Spark SQL 的工具来完成各种异质数据的查询，但是我们平时用 SQL 并没有这么强大。因为虽然用 SQL 对数据库做查询，任何 DBMS 都支持，如果想用 SQL 查询 CSV 或者 JSON，就需要很多额外的处理。
+
+所以如果能有一个简单的工具，不需要引入 Spark，就能支持对任何数据源使用 SQL 查询，是不是很有意义？
+
+比如，如果 shell 支持这样使用是不是爽爆了？
+![sqlShell](.images/sqlShell.png)
+
+再比如，客户端会从服务器 API 获取数据的子集，如果这个子集可以在前端通过 SQL 直接做一些额外查询，那将非常灵活，并且用户可以得到即时的响应。
+
+软件领域有个著名的格林斯潘第十定律：
+> 任何 C 或 Fortran 程序复杂到一定程度之后，都会包含一个临时开发的、不合规范的、充满程序错误的、运行速度很慢的、只有一半功能的 Common Lisp 实现。
+
+仿照它来一个程序君第四十二定律：
+> 任何 API 接口复杂到一定程度后，都会包含一个临时开发的、不合规范的、充满程序错误的、运行速度很慢的、只有一半功能的 SQL 实现。
+
+所以，今天就来设计一个可以对任何数据源使用 SQL 查询，并获得结果的库如何？当然，作为一个 MVP（Mimimu Viable Product），就暂且只支持对 CSV 的 SQL 查询。不单如此，还希望这个库可以给 Python3 和 Node.js 使用。
+
+## 设计分析
+首先需要一个 SQL 解析器。在 Rust 下，写一个解析器并不困难，可以用 serde、用任何 parser combinator 或者 PEG parser 来实现，比如 nom 或者 pest。不过 SQL 解析，这种足够常见的需求，Rust 社区已经有方案，用 sqlparser-rs。
+
+接下来就是如何把 CSV 或者其它数据源加载为 DataFrame。
+
+做过数据处理或者使用过 pandas 的同学，应该对 DataFrame 并不陌生，它是一个矩阵数据结构，其中每一列可能包含不同的类型，可以在 DataFrame 上做过滤、投影和排序等操作。
+
+在 Rust 下，可以用 polars ，来完成数据从 CSV 到 DataFrame 的加载和各种后续操作。
+
+确定了这两个库之后，后续的工作就是：如何把 sqlparser 解析出来的抽象语法树 AST（Abstract Syntax Tree），映射到 polars 的 DataFrame 的操作上。
+
+抽象语法树是用来描述复杂语法规则的工具，小到 SQL 或者某个 DSL，大到一门编程语言，其语言结构都可以通过 AST 来描述，如下图所示（来源：wikipedia）：
+
+![ast.png](.images/ast.png)
+
+如何在 SQL 语法和 DataFrame 的操作间进行映射呢？比如我们要从数据中选出三列显示，那这个 “select a, b, c” 就要能映射到 DataFrame 选取 a、b、c 三列输出。
+
+polars 内部有自己的 AST 可以把各种操作聚合起来，最后一并执行。比如对于 “where a > 10 and b < 5”， Polars 的表达式是：col("a").gt(lit(10)).and(col("b").lt(lit(5)))。col 代表列，gt/lt 是大于 / 小于，lit 是字面量的意思。
+
+有了这个认知，“对 CSV 等源进行 SQL 查询”核心要解决的问题变成了，如何把一个 AST（ SQL AST ）转换成另一个 AST（ DataFrame AST ）。
+
+等等，这不就是宏编程（对于 Rust 来说，是过程宏）做的事情么？因为进一步分析二者的数据结构，可以得到这样的对应关系：
+
+![img.png](.images/Rust过程宏.png)
+
+要做的主要事情其实就是，在两个数据结构之间进行转换。
+
+宏编程并没有什么大不了的，抛开 quote/unquote，它主要的工作就是把一棵语法树转换成另一颗语法树，而这个转换的过程深入下去，不过就是数据结构到数据结构的转换而已。所以一句话总结：宏编程的主要流程就是实现若干 From和 TryFrom，是不是很简单。
+
+当然，这个转换的过程非常琐碎，如果语言本身没有很好的模式匹配能力，进行宏编程绝对是对自己非人道的折磨。
+
+好在 Rust 有很棒的模式匹配支持，它虽然没有 Erlang/Elixir 的模式匹配那么强大，但足以秒杀绝大多数的编程语言。
+
+## 创建一个 SQL 方言
+cargo new queryer —lib 生成一个库，打开生成的目录，创建和 src 平级的 examples，并在 Cargo.toml 中添加代码：
+```toml
+[package]
+name = "queryer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[example]]
+name = "dialect"
+
+[dependencies]
+anyhow = "1" # 错误处理，其实对于库我们应该用 thiserror，但这里简单起见就不节外生枝了
+async-trait = "0.1" # 允许 trait 里有 async fn
+sqlparser = "0.19.0" # SQL 解析器
+polars = { version = "0.23.1", features = ["json", "lazy"] } # DataFrame 库
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] } # 我们的老朋友 HTTP 客户端
+tokio = { version = "1", features = ["fs"]} # 我们的老朋友异步库，我们这里需要异步文件处理
+tracing = "0.1" # 日志处理
+
+[dev-dependencies]
+tracing-subscriber = "0.3.15" # 日志处理
+tokio = { version = "1", features = ["full"]} # 在 examples 下我们需要更多的 tokio feature
+```
+
+因为对 sqlparser 的功能不太熟悉，这里写个 example 尝试一下，它会在 examples 目录下寻找 dialect.rs 文件。
+
+所以，创建 examples/dialect.rs 文件，并写一些测试 sqlparser 的代码：
+```rust
+use sqlparser::{dialect::GenericDialect, parser::Parser};
+fn main() {
+    tracing_subscriber::fmt::init();
+    
+    let sql = "SELECT a a1, b, 123, myfunc(b), * \
+    FROM data_source \
+    WHERE a > b AND b < 100 AND c BETWEEN 10 AND 20 \
+    ORDER BY a DESC, b \
+    LIMIT 50 OFFSET 10";
+    
+    let ast = Parser::parse_sql(&GenericDialect::default(), sql);
+    println!("{:#?}", ast);
+}
+```
+这段代码用一个 SQL 语句来测试Parser::parse_sql会输出什么样的结构。
+
+当你写库代码时，如果遇到不明白的第三方库，可以用撰写 example 这种方式先试一下。
+
+运行 cargo run --example dialect查看结果：
+```text
+Ok(
+    [
+        Query(
+            Query {
+                with: None,
+                body: Select(
+                    Select {
+                        distinct: false,
+                        top: None,
+                        projection: [
+                            ExprWithAlias {
+                                expr: Identifier(
+                                    Ident {
+                                        value: "a",
+                                        quote_style: None,
+                                    },
+                                ),
+                                alias: Ident {
+                                    value: "alis",
+                                    quote_style: None,
+                                },
+                            },
+                            UnnamedExpr(
+                                Identifier(
+                                    Ident {
+                                        value: "age",
+                                        quote_style: None,
+                                    },
+                                ),
+                            ),
+                            UnnamedExpr(
+                                Value(
+                                    Number(
+                                        "123",
+                                        false,
+                                    ),
+                                ),
+                            ),
+                            UnnamedExpr(
+                                Function(
+                                    Function {
+                                        name: ObjectName(
+                                            [
+                                                Ident {
+                                                    value: "myfunc",
+                                                    quote_style: None,
+                                                },
+                                            ],
+                                        ),
+                                        args: [
+                                            Unnamed(
+                                                Expr(
+                                                    Identifier(
+                                                        Ident {
+                                                            value: "b",
+                                                            quote_style: None,
+                                                        },
+                                                    ),
+                                                ),
+                                            ),
+                                        ],
+                                        over: None,
+                                        distinct: false,
+                                    },
+                                ),
+                            ),
+                            Wildcard,
+                        ],
+                        into: None,
+                        from: [
+                            TableWithJoins {
+                                relation: Table {
+                                    name: ObjectName(
+                                        [
+                                            Ident {
+                                                value: "data_source",
+                                                quote_style: None,
+                                            },
+                                        ],
+                                    ),
+                                    alias: None,
+                                    args: None,
+                                    with_hints: [],
+                                },
+                                joins: [],
+                            },
+                        ],
+                        lateral_views: [],
+                        selection: Some(
+                            BinaryOp {
+                                left: BinaryOp {
+                                    left: BinaryOp {
+                                        left: Identifier(
+                                            Ident {
+                                                value: "a",
+                                                quote_style: None,
+                                            },
+                                        ),
+                                        op: Gt,
+                                        right: Identifier(
+                                            Ident {
+                                                value: "b",
+                                                quote_style: None,
+                                            },
+                                        ),
+                                    },
+                                    op: And,
+                                    right: BinaryOp {
+                                        left: Identifier(
+                                            Ident {
+                                                value: "b",
+                                                quote_style: None,
+                                            },
+                                        ),
+                                        op: Lt,
+                                        right: Value(
+                                            Number(
+                                                "100",
+                                                false,
+                                            ),
+                                        ),
+                                    },
+                                },
+                                op: And,
+                                right: Between {
+                                    expr: Identifier(
+                                        Ident {
+                                            value: "c",
+                                            quote_style: None,
+                                        },
+                                    ),
+                                    negated: false,
+                                    low: Value(
+                                        Number(
+                                            "10",
+                                            false,
+                                        ),
+                                    ),
+                                    high: Value(
+                                        Number(
+                                            "20",
+                                            false,
+                                        ),
+                                    ),
+                                },
+                            },
+                        ),
+                        group_by: [],
+                        cluster_by: [],
+                        distribute_by: [],
+                        sort_by: [],
+                        having: None,
+                        qualify: None,
+                    },
+                ),
+                order_by: [
+                    OrderByExpr {
+                        expr: Identifier(
+                            Ident {
+                                value: "a",
+                                quote_style: None,
+                            },
+                        ),
+                        asc: Some(
+                            false,
+                        ),
+                        nulls_first: None,
+                    },
+                    OrderByExpr {
+                        expr: Identifier(
+                            Ident {
+                                value: "b",
+                                quote_style: None,
+                            },
+                        ),
+                        asc: None,
+                        nulls_first: None,
+                    },
+                ],
+                limit: Some(
+                    Value(
+                        Number(
+                            "50",
+                            false,
+                        ),
+                    ),
+                ),
+                offset: Some(
+                    Offset {
+                        value: Value(
+                            Number(
+                                "10",
+                                false,
+                            ),
+                        ),
+                        rows: None,
+                    },
+                ),
+                fetch: None,
+                lock: None,
+            },
+        ),
+    ],
+)
+```
+
+如果 SQL 中的 FROM 子句后面可以接一个 URL 或者文件名该多好？这样，可以从这个 URL 或文件中读取数据。就像开头那个 “select * from ps” 的例子，把 ps 命令作为数据源，从它的输出中很方便地取数据。
+
+但是普通的 SQL 语句是不支持这种写法的，不过 sqlparser 允许你创建自己的 SQL 方言，那就来尝试一下。
+
+创建 src/dialect.rs 文件，添入下面的代码：
+```rust
+use sqlparser::dialect::Dialect;
+#[derive(Debug, Default)]
+pub struct TyrDialect;
+// 创建自己的 sql 方言。TyrDialect 支持 identifier 可以是简单的 url
+impl Dialect for TyrDialect {
+    fn is_identifier_start(&self, ch: char) -> bool {
+        ('a'..='z').contains(&ch) || ('A'..='Z').contains(&ch) || ch == '_'
+    }
+    // identifier 可以有 ':', '/', '?', '&', '='
+    fn is_identifier_part(&self, ch: char) -> bool {
+        ('a'..='z').contains(&ch)
+            || ('A'..='Z').contains(&ch)
+            || ('0'..='9').contains(&ch)
+            || [':', '/', '?', '&', '=', '-', '_', '.'].contains(&ch)
+    }
+}
+/// 测试辅助函数
+pub fn example_sql() -> String {
+    let url = "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/latest/owid-covid-latest.csv";
+    let sql = format!(
+        "SELECT location name, total_cases, new_cases, total_deaths, new_deaths \
+        FROM {} where new_deaths >= 500 ORDER BY new_cases DESC LIMIT 6 OFFSET 5",
+        url
+    );
+    sql
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlparser::parser::Parser;
+    #[test]
+    fn it_works() {
+        assert!(Parser::parse_sql(&TyrDialect::default(), &example_sql()).is_ok());
+    }
+}
+```
+
+这个代码主要实现了 sqlparser 的 Dialect trait，可以重载 SQL 解析器判断标识符的方法。之后我们需要在 src/lib.rs 中添加
+> mod dialect;
+
+引入这个文件，最后也写了一个测试，你可以运行  cargo test 测试一下看看。
+
+测试通过！现在可以正常解析出这样的 SQL 了：
+> SELECT * from https://abc.xyz/covid-cases.csv where new_deaths >= 500
+
+通过添加可以让 URL 合法的字符，就实现了一个自己支持的 URL 的 SQL 方言解析。
+
+为什么这么厉害？因为通过 trait，可以很方便地做控制反转（Inversion of Control），在 Rust 开发中，这是很常见的一件事情。
+
+## 实现 AST 的转换
+刚刚做了 SQL 解析，接着就是用 polars 做 AST 转换了。
+
+由于不太了解 polars 库，接下来还是先测试一下怎么用。
+
+创建 examples/covid.rs（记得在 Cargo.toml 中添加），手工实现一个 DataFrame 的加载和查询：
+```rust
+use std::io::Cursor;
+use anyhow::Result;
+use polars::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+    let url = "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/latest/owid-covid-latest.csv";
+    let data = reqwest::get(url).await?.text().await?;
+
+    // 使用 polars 直接请求
+    let df = CsvReader::new(Cursor::new(data))
+        .infer_schema(Some(16))
+        .finish()?;
+    let filtered = df.filter(&df["new_deaths"].gt(500)?)?;
+
+    println!(
+        "{:?}",
+        filtered.select([
+            "location",
+            "total_cases",
+            "new_cases",
+            "total_deaths",
+            "new_deaths"
+        ])
+    );
+
+    Ok(())
+}
+```
+如果运行这个 example，可以得到一个打印得非常漂亮的表格，它从 GitHub 上的 owid-covid-latest.csv 文件中，读取并查询 new_deaths 大于 500 的国家和区域：
+> cargo run --color=always --example covid --quiet
+
+```text
+┌────────────────┬──────────────┬───────────┬──────────────┬────────────┐
+│ location       ┆ total_cases  ┆ new_cases ┆ total_deaths ┆ new_deaths │
+│ ---            ┆ ---          ┆ ---       ┆ ---          ┆ ---        │
+│ str            ┆ f64          ┆ f64       ┆ f64          ┆ f64        │
+╞════════════════╪══════════════╪═══════════╪══════════════╪════════════╡
+│ Europe         ┆ 2.19407121e8 ┆ 220746.0  ┆ 1.889765e6   ┆ 766.0      │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ European Union ┆ 1.61096382e8 ┆ 193049.0  ┆ 1.124678e6   ┆ 669.0      │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ High income    ┆ 3.5149376e8  ┆ 673545.0  ┆ 2.502935e6   ┆ 1540.0     │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ North America  ┆ 1.09491859e8 ┆ 138564.0  ┆ 1.482132e6   ┆ 509.0      │
+├╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌┤
+│ World          ┆ 5.8541397e8  ┆ 818247.0  ┆ 6.420297e6   ┆ 2204.0     │
+└────────────────┴──────────────┴───────────┴──────────────┴────────────┘
+```
+
+最终要实现的就是这个效果，通过解析一条做类似查询的 SQL，来进行相同的数据查询。怎么做呢？
+
+主要的工作就是把 sqlparser 解析出来的 AST 转换成 polars 定义的 AST。再回顾一下 SQL AST 的输出：
+```text
+Ok([Query(
+    Query {
+        with: None,
+        body: Select(
+            Select {
+                distinct: false,
+                top: None,
+                projection: [ ... ],
+                from: [ TableWithJoins { ... } ],
+                selection: Some(BinaryOp { ... }),
+                ...
+            }
+        ),
+        order_by: [ OrderByExpr { ... } ],
+        limit: Some(Value( ... )),
+        offset: Some(Offset { ... })
+    }
+])
+```
+
+这里的 Query 是 Statement enum 其中一个结构。SQL 语句除了查询外，还有插入数据、删除数据、创建表等其他语句，目前不关心这些，只关心 Query。
+
+所以，可以创建一个文件 src/convert.rs，先定义一个数据结构 Sql 来描述两者的对应关系，然后再实现 Sql 的 TryFrom trait：
+```text
+/// 解析出来的 SQL
+pub struct Sql<'a> {
+    pub(crate) selection: Vec<Expr>,
+    pub(crate) condition: Option<Expr>,
+    pub(crate) source: &'a str,
+    pub(crate) order_by: Vec<(String, bool)>,
+    pub(crate) offset: Option<i64>,
+    pub(crate) limit: Option<usize>,
+}
+impl<'a> TryFrom<&'a Statement> for Sql<'a> {
+    type Error = anyhow::Error;
+    fn try_from(sql: &'a Statement) -> Result<Self, Self::Error> {
+        match sql {
+            // 目前我们只关心 query (select ... from ... where ...)
+            Statement::Query(q) => {
+              ...
+            }
+        }
+    }
+}
+```
+框有了，继续写转换，看 Query 的结构：它有一个 body，是 Select 类型，其中包含 projection、from、select。
+
+在 Rust 里，可以用一个赋值语句，同时使用模式匹配加上数据的解构，将它们都取出来：
+```text
+let Select {
+    from: table_with_joins,
+    selection: where_clause,
+    projection,
+    group_by: _,
+    ..
+} = match &q.body {
+    SetExpr::Select(statement) => statement.as_ref(),
+    _ => return Err(anyhow!("We only support Select Query at the moment")),
+};
+```
+
+一句话，从匹配到取引用，再到将引用内部几个字段赋值给几个变量，都完成了，真是太舒服了！这样能够极大提高生产力的语言，怎能不爱它？
+
+再看一个处理 Offset 的例子，需要把 sqlparser 的 Offset 转换成 i64，同样，可以实现一个 TryFrom trait。这次是在 match 的一个分支上，做了数据结构的解构。
+```text
+use sqlparser::ast::Offset as SqlOffset;
+// 因为 Rust trait 的孤儿规则，我们如果要想对已有的类型实现已有的 trait，
+// 需要简单包装一下
+pub struct Offset<'a>(pub(crate) &'a SqlOffset);
+/// 把 SqlParser 的 offset expr 转换成 i64
+impl<'a> From<Offset<'a>> for i64 {
+    fn from(offset: Offset) -> Self {
+        match offset.0 {
+            SqlOffset {
+                value: SqlExpr::Value(SqlValue::Number(v, _b)),
+                ..
+            } => v.parse().unwrap_or(0),
+            _ => 0,
+        }
+    }
+}
+```
+
+是的，数据的解构也可以在分支上进行，如 if let / while let，也是这个用法。这样对模式匹配的全方位支持，你用得越多，就会越感激 Rust 的作者，尤其在开发过程宏的时候。
+
+从这段代码中还可以看到，定义的数据结构 Offset 使用了生命周期标注 <'a>，这是因为内部使用了 SqlOffset 的引用。有关生命周期的知识，很快就会讲到，这里你暂且不需要理解为什么要这么做。
+
+整个 src/convert.rs 主要都是通过模式匹配，进行不同子类型之间的转换。
+
+未来你在 Rust 下写过程宏（procedure macro），干的基本就是这个工作，只不过，最后你需要把转换后的 AST 使用 quote 输出成代码。在这个例子里，不需要这么做，polars 的 lazy 接口直接能处理 AST。
+
+说句题外话，之所以不厌其烦地讲述数据转换的这个过程，是因为它是编程活动中非常重要的部分。写代码，主要都在处理什么？绝大多数处理逻辑都是把数据从一个接口转换成另一个接口。
+
+以熟悉的用户注册流程为例：
+
+- 用户的输入被前端校验后，转换成 CreateUser 对象，然后再转换成一个 HTTP POST 请求。
+
+- 当这个请求到达服务器后，服务器将其读取，再转换成服务器的 CreateUser 对象，这个对象在校验和正规化（normalization）后被转成一个 ORM 对象（如果使用 ORM 的话），然后 ORM 对象再被转换成 SQL，发送给数据库服务器。
+
+- 数据库服务器将 SQL 请求包装成一个 WAL（Write-Ahead Logging），这个 WAL 再被更新到数据库文件中。
+
+这样的处理流程，由于它和业务高度绑定，往往容易被写得很耦合，久而久之就变成了难以维护的意大利面条。好的代码，应该是每个主流程都清晰简约，代码恰到好处地出现在那里，让人不需要注释也能明白作者在写什么。
+
+这就意味着，要把那些并不重要的细节封装在单独的地方，封装的粒度以一次写完、基本不需要再变动为最佳，或者即使变动，它的影响也非常局部。
+
+这样的代码，方便阅读、容易测试、维护简单，处理起来更是一种享受。Rust 标准库的 From/ TryFromtrait ，就是出于这个目的设计的，非常值得我们好好使用。
+
+## 从源中取数据
+完成了 AST 的转换，接下来就是从源中获取数据。
+
+通过对 Sql 结构的处理和填充，可以得到 SQL FROM 子句里的数据源，这个源，规定它必须是以 http(s):// 或者 file:// 开头的字符串。因为，以 http 开头可以通过 URL 获取内容，file 开头可以通过文件名，打开本地文件获取内容。
+
+所以拿到了这个描述了数据源的字符串后，很容易能写出这样的代码：
+```text
+/// 从文件源或者 http 源中获取数据
+async fn retrieve_data(source: impl AsRef<str>) -> Result<String> {
+    let name = source.as_ref();
+    match &name[..4] {
+        // 包括 http / https
+        "http" => Ok(reqwest::get(name).await?.text().await?),
+        // 处理 file://<filename>
+        "file" => Ok(fs::read_to_string(&name[7..]).await?),
+        _ => Err(anyhow!("We only support http/https/file at the moment")),
+    }
+}
+```
+
+代码看起来很简单，但未来并不容易维护。因为一旦你的 HTTP 请求获得的结果需要做一些后续的处理，这个函数很快就会变得很复杂。那该怎么办呢？
+
+可以用 trait 抽取 fetch 的逻辑，定义好接口，然后改变 retrieve_data 的实现。
+
+所以下面是 src/fetcher.rs 的完整代码：
+```text
+use anyhow::{anyhow, Result};
+use async_trait::async_trait;
+use tokio::fs;
+
+// Rust 的 async trait 还没有稳定，可以用 async_trait 宏
+#[async_trait]
+pub trait Fetch {
+    type Error;
+    async fn fetch(&self) -> Result<String, Self::Error>;
+}
+
+/// 从文件源或者 http 源中获取数据，返回字符串
+pub async fn retrieve_data(source: impl AsRef<str>) -> Result<String> {
+    let name = source.as_ref();
+    match &name[..4] {
+        // 包括 http / https
+        "http" => UrlFetcher(name).fetch().await,
+        // 处理 file://<filename>
+        "file" => FileFetcher(name).fetch().await,
+        _ => Err(anyhow!("We only support http/https/file at the moment")),
+    }
+}
+
+struct UrlFetcher<'a>(pub(crate) &'a str);
+struct FileFetcher<'a>(pub(crate) &'a str);
+
+#[async_trait]
+impl<'a> Fetch for UrlFetcher<'a> {
+    type Error = anyhow::Error;
+
+    async fn fetch(&self) -> Result<String, Self::Error> {
+        Ok(reqwest::get(self.0).await?.text().await?)
+    }
+}
+
+#[async_trait]
+impl<'a> Fetch for FileFetcher<'a> {
+    type Error = anyhow::Error;
+
+    async fn fetch(&self) -> Result<String, Self::Error> {
+        Ok(fs::read_to_string(&self.0[7..]).await?)
+    }
+}
+```
+
+这看上去似乎没有收益，还让代码变得更多。但它把 retrieve_data 和具体每一种类型的处理分离了，还是通过开闭原则，构建低耦合、高内聚的代码。这样未来修改 UrlFetcher 或者 FileFetcher，或者添加新的 Fetcher，对 retrieve_data 的变动都是最小的。
+
+现在完成了 SQL 的解析、实现了从 SQL 到 DataFrame 的 AST 的转换，以及数据源的获取。挑战已经完成一大半了，就剩主流程逻辑了。
+
+## 主流程
+一般在做一个库的时候，不会把内部使用的数据结构暴露出去，而是会用自己的数据结构包裹它。
+
+但这样代码有一个问题：原有数据结构的方法，如果想暴露出去，每个接口都需要实现一遍，虽然里面的代码就是一句简单的 proxy，但还是很麻烦。这是在使用很多语言的一个痛点。
+
+正好在 queryer 库里也会有这个问题：SQL 查询后的结果，会放在一个 polars 的 DataFrame 中，但不想直接暴露这个 DataFrame 出去。因为一旦这么做，未来想加额外的 metadata，就无能为力了。
+
+所以定义了一个 DataSet，包裹住 DataFrame。可还想暴露 DataSet 的接口，它有好多函数，总不能挨个 proxy 吧？
+
+不用。Rust 提供了 Deref 和 DerefMut trait 做这个事情，它允许类型在解引用时，可以解引用到其它类型。现在先来看的 DataSet 怎么处理：
+```text
+#[derive(Debug)]
+pub struct DataSet(DataFrame);
+/// 让 DataSet 用起来和 DataFrame 一致
+impl Deref for DataSet {
+    type Target = DataFrame;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+/// 让 DataSet 用起来和 DataFrame 一致
+impl DerefMut for DataSet {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+// DataSet 自己的方法
+impl DataSet {
+    /// 从 DataSet 转换成 csv
+    pub fn to_csv(&self) -> Result<String> {
+        ...
+    }
+}
+```
+
+可以看到，DataSet 在解引用时，它的 Target 是 DataFrame，这样 DataSet 在用户使用时，就和 DataFrame 一致了；还为 DataSet 实现了 to_csv 方法，可以把查询结果生成出 CSV。
+
+好，定义好 DataSet，核心函数 query 实现起来其实很简单：先解析出需要的 Sql 结构，然后从 source 中读入一个 DataSet，做 filter / order_by / offset / limit / select 等操作，最后返回 DataSet。
+
+DataSet 的定义和 query 函数都在 src/lib.rs，它的完整代码如下：
+```text
+use anyhow::{anyhow, Result};
+use polars::prelude::*;
+use sqlparser::parser::Parser;
+use std::convert::TryInto;
+use std::ops::{Deref, DerefMut};
+use tracing::info;
+mod convert;
+mod dialect;
+mod loader;
+mod fetcher;
+use convert::Sql;
+use loader::detect_content;
+use fetcher::retrieve_data;
+pub use dialect::example_sql;
+pub use dialect::TyrDialect;
+#[derive(Debug)]
+pub struct DataSet(DataFrame);
+/// 让 DataSet 用起来和 DataFrame 一致
+impl Deref for DataSet {
+    type Target = DataFrame;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+/// 让 DataSet 用起来和 DataFrame 一致
+impl DerefMut for DataSet {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+impl DataSet {
+    /// 从 DataSet 转换成 csv
+    pub fn to_csv(&self) -> Result<String> {
+        let mut buf = Vec::new();
+        let writer = CsvWriter::new(&mut buf);
+        writer.finish(self)?;
+        Ok(String::from_utf8(buf)?)
+    }
+}
+/// 从 from 中获取数据，从 where 中过滤，最后选取需要返回的列
+pub async fn query<T: AsRef<str>>(sql: T) -> Result<DataSet> {
+    let ast = Parser::parse_sql(&TyrDialect::default(), sql.as_ref())?;
+    if ast.len() != 1 {
+        return Err(anyhow!("Only support single sql at the moment"));
+    }
+    let sql = &ast[0];
+    // 整个 SQL AST 转换成我们定义的 Sql 结构的细节都埋藏在 try_into() 中
+    // 我们只需关注数据结构的使用，怎么转换可以之后需要的时候才关注，这是
+    // 关注点分离，是我们控制软件复杂度的法宝。
+    let Sql {
+        source,
+        condition,
+        selection,
+        offset,
+        limit,
+        order_by,
+    } = sql.try_into()?;
+    info!("retrieving data from source: {}", source);
+    // 从 source 读入一个 DataSet
+    // detect_content，怎么 detect 不用要，重要的是它能根据内容返回 DataSet
+    let ds = detect_content(retrieve_data(source).await?).load()?;
+    let mut filtered = match condition {
+        Some(expr) => ds.0.lazy().filter(expr),
+        None => ds.0.lazy(),
+    };
+    filtered = order_by
+        .into_iter()
+        .fold(filtered, |acc, (col, desc)| acc.sort(&col, desc));
+    if offset.is_some() || limit.is_some() {
+        filtered = filtered.slice(offset.unwrap_or(0), limit.unwrap_or(usize::MAX));
+    }
+    Ok(DataSet(filtered.select(selection).collect()?))
+}
+```
+
+在 query 函数的主流程中，整个 SQL AST 转换成了我们定义的 Sql 结构，细节都埋藏在 try_into() 中，我们只需关注数据结构 Sql 的使用，怎么转换之后需要的时候再关注。
+
+这就是关注点分离（Separation of Concerns），是我们控制软件复杂度的法宝。Rust  标准库中那些经过千锤百炼的 trait，就是用来帮助我们写出更好的、复杂度更低的代码。
+
+主流程里有个 detect_content 函数，它可以识别文本内容，选择相应的加载器把文本加载为 DataSet，因为目前只支持 CSV，但未来可以支持 JSON 等其他格式。
+
+这个函数定义在 src/loader.rs 里，我们创建这个文件，并添入下面的代码：
+```rust
+use crate::DataSet;
+use anyhow::Result;
+use polars::prelude::*;
+use std::io::Cursor;
+
+pub trait Load {
+    type Error;
+    fn load(self) -> Result<DataSet, Self::Error>;
+}
+
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Loader {
+    Csv(CsvLoader),
+}
+
+#[derive(Default, Debug)]
+pub struct CsvLoader(pub(crate) String);
+
+impl Loader {
+    pub fn load(self) -> Result<DataSet> {
+        match self {
+            Loader::Csv(csv) => csv.load(),
+        }
+    }
+}
+
+pub fn detect_content(data: String) -> Loader {
+    // TODO: 内容检测
+    Loader::Csv(CsvLoader(data))
+}
+
+impl Load for CsvLoader {
+    type Error = anyhow::Error;
+
+    fn load(self) -> Result<DataSet, Self::Error> {
+        let df = CsvReader::new(Cursor::new(self.0))
+            .infer_schema(Some(16))
+            .finish()?;
+        Ok(DataSet(df))
+    }
+}
+```
+同样，通过 trait，虽然目前只支持 CsvLoader，但保留了为未来添加更多 Loader 的接口。
+
+如果代码编译通过了，可以修改之前的 examples/query.rs，使用 SQL 来查询测试一下：
+```rust
+use anyhow::Result;
+use queryer::query;
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+    let url = "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/latest/owid-covid-latest.csv";
+    // 使用 sql 从 URL 里获取数据
+    let sql = format!(
+        "SELECT location name, total_cases, new_cases, total_deaths, new_deaths \
+        FROM {} where new_deaths >= 500 ORDER BY new_cases DESC",
+        url
+    );
+    let df1 = query(sql).await?;
+    println!("{:?}", df1);
+    Ok(())
+}
+```
+Bingo！一切正常，我们完成了，用 SQL 语句请求网络上的某个 CSV ，并对 CSV 做查询和排序，返回结果的正确无误！
+
+> cargo run --example query --quiet
+```text
+2022-08-22T10:33:47.898907Z  INFO queryer: retrieving data from source: file:////Users/magicLuoMacBook/Downloads/owid-covid-latest.csv
+DataSet(shape: (6, 5)
++------------------+--------------+-----------+--------------+------------+
+| name             | total_cases  | new_cases | total_deaths | new_deaths |
+| ---              | ---          | ---       | ---          | ---        |
+| str              | f64          | f64       | f64          | f64        |
++==================+==============+===========+==============+============+
+| "World"          | 5.96169311e8 | 6.03099e5 | 6.453733e6   | 1618       |
++------------------+--------------+-----------+--------------+------------+
+| "High income"    | 3.60024213e8 | 4.96329e5 | 2.526255e6   | 1219       |
++------------------+--------------+-----------+--------------+------------+
+| "Asia"           | 1.75726185e8 | 3.52385e5 | 1.465433e6   | 543        |
++------------------+--------------+-----------+--------------+------------+
+| "North America"  | 1.11113512e8 | 1.34394e5 | 1.490782e6   | 782        |
++------------------+--------------+-----------+--------------+------------+
+| "United States"  | 9.3641944e7  | 1.32108e5 | 1.041149e6   | 770        |
++------------------+--------------+-----------+--------------+------------+
+| "United Kingdom" | 2.3549842e7  | 4.0115e4  | 1.87215e5    | 931        |
++------------------+--------------+-----------+--------------+------------+
+)
+```
+
+用 tokei 查看代码行数，可以看到，用了 376 行，远低于 500 行的目标！
+
+❯ tokei src/
+```text
+===============================================================================
+ Language            Files        Lines         Code     Comments       Blanks
+===============================================================================
+ Rust                    5          455          376           13           66
+ |- Markdown             4           17            0           17            0
+ (Total)                            472          376           30           66
+===============================================================================
+ Total                   5          455          376           13           66
+===============================================================================
+```
+
+在这么小的代码量下，在架构上做了很多为解耦考虑的工作：整个架构被拆成了 Sql Parser、Fetcher、Loader 和 query 四个部分。
+
+![img.png](.images/query_follow.png)
+
+其中未来可能存在变化的 Fetcher 和 Loader 可以轻松扩展，比如一开始提到的那个 “select * from ps”，可以用一个 StdoutFetcher 和 TsvLoader 来处理。
+
+## 支持其它语言
+现在核心代码写完了，实现的 queryer 工具可以在 Rust 下作为一个库，提供给其它 Rust 程序用，这很美妙。
+
+但故事还远不止如此。这么牛的功能，只能 Rust 程序员享用，太暴殄天物了。毕竟独乐乐不如众乐乐。所以，我们来试着将它集成到其它语言，比如常用的 Node.js/Python。
+
+Node.js/Python 中有很多高性能的代码，都是 C/C++ 写的，但跨语言调用往往涉及繁杂的接口转换代码，所以用 C/C++ ，写这些接口转换的时候非常痛苦。
+
+看看如果用 Rust 的话，能否避免这些繁文缛节？毕竟，我们对使用 Rust ，为其它语言提供高性能代码，有很高的期望，如果这个过程也很复杂，那怎么用得起来？
+
+对于 queryer 库，我们想暴露出来的主要接口是：query，用户传入一个 SQL 字符串和一个输出类型的字符串，返回一个按照 SQL 查询处理过的、符合输出类型的字符串。比如对 Python 来说，就是下面的接口：
+```text
+def query(sql, output = 'csv')
+```
+
+先创建一个新的目录 queryer 作为 workspace，把现有的 queryer 移进去，成为它的子目录。然后，创建一个 Cargo.toml，包含以下代码：
+```toml
+[workspace]
+members = [
+  "queryer",
+  "queryer-py"
+]
+```
+
