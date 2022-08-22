@@ -4,7 +4,6 @@ use polars::prelude::*;
 use sqlparser::parser::Parser;
 use tracing::info;
 use crate::convert::Sql;
-use crate::dialect::TyrDialect;
 use crate::fetcher::retrieve_data;
 use crate::loader::detect_content;
 
@@ -12,6 +11,9 @@ mod convert;
 mod dialect;
 mod loader;
 mod fetcher;
+
+pub use dialect::example_sql;
+pub use dialect::TyrDialect;
 
 #[derive(Debug)]
 pub struct DataSet(DataFrame);

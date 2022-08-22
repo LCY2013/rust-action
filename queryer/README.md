@@ -890,4 +890,74 @@ features = ["extension-module"]
 pyo3-build-config = "0.14"
 ```
 
+Rust 和 Python 交互的库是 pyo3。在 src/lib.rs 下，添入如下代码：
+```rust
+use pyo3::{exceptions, prelude::*};
+#[pyfunction]
+pub fn example_sql() -> PyResult<String> {
+    Ok(queryer::example_sql())
+}
+#[pyfunction]
+pub fn query(sql: &str, output: Option<&str>) -> PyResult<String> {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let data = rt.block_on(async { queryer::query(sql).await.unwrap() });
+    match output {
+        Some("csv") | None => Ok(data.to_csv().unwrap()),
+        Some(v) => Err(exceptions::PyTypeError::new_err(format!(
+            "Output type {} not supported",
+            v
+        ))),
+    }
+}
+#[pymodule]
+fn queryer_py(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(query, m)?)?;
+    m.add_function(wrap_pyfunction!(example_sql, m)?)?;
+    Ok(())
+}
+```
 
+即使我不解释这些代码，你也基本能明白它在干嘛。我们为 Python 模块提供了两个接口 example_sql 和 query。
+
+接下来在 queryer-py 目录下，创建 virtual env，然后用 maturin develop 构建 python 模块：
+```text
+python3 -m venv .env
+source .env/bin/activate
+pip install maturin ipython
+maturin develop
+```
+
+构建完成后，可以用 ipython 测试：
+```text
+In [1]: import queryer_py
+In [2]: sql = queryer_py.example_sql()
+In [3]: print(queryer_py.query(sql, 'csv'))
+name,total_cases,new_cases,total_deaths,new_deaths
+India,32649947.0,46759.0,437370.0,509.0
+Iran,4869414.0,36279.0,105287.0,571.0
+Africa,7695475.0,33957.0,193394.0,764.0
+South America,36768062.0,33853.0,1126593.0,1019.0
+Brazil,20703906.0,27345.0,578326.0,761.0
+Mexico,3311317.0,19556.0,257150.0,863.0
+In [4]: print(queryer_py.query(sql, 'json'))
+---------------------------------------------------------------------------
+TypeError                                 Traceback (most recent call last)
+<ipython-input-4-7082f1ffe46a> in <module>
+----> 1 print(queryer_py.query(sql, 'json'))
+TypeError: Output type json not supported
+```
+
+Cool！仅仅写了 20 行代码，就让我们的模块可以被 Python 调用，错误处理也很正常。你看，在用 Rust 库的基础上，我们稍微写一些辅助代码，就能够让它和不同的语言集成起来。我觉得这是 Rust 非常有潜力的使用方向。
+
+毕竟，对很多公司来说，原有的代码库想要完整迁移到 Rust 成本很大，但是通过 Rust 和各个语言轻便地集成，可以把部分需要高性能的代码迁移到 Rust，尝到甜头，再一点点推广。这样，Rust 就能应用起来了。
+
+Rust 和 nodejs 间交互可以使用 neon。
+
+我们的 queryer 库目前使用到了操作系统的功能，比如文件系统，所以它无法被编译成 WebAssembly。未来如果能移除对操作系统的依赖，这个代码还能被编译成 WASM，供 Web 前端使用。
+
+如果想在 iOS/Android 下使用这个库，可以用类似 Python/Node.js 的方法做接口封装，Mozilla 提供了一个 uniffi 的库，它自己的 Firefox  各个端也是这么处理的：
+![img.png](.images/uniffi.png)
+
+对于桌面开发，Rust 下有一个很有潜力的客户端开发工具 tauri，它很有机会取代很多使用 Electron 的场合。
+
+我写了一个简单的 tuari App 叫 data-viewer，如果你感兴趣的话，可以在 github repo 下的 data-viewer 目录下看 tauri 使用 queryer 的代码，下面是运行后的效果。为了让代码最简单，前端没有用任何框架，如果你是一名前端开发者，可以用 Vue 或者 React 加上一个合适的 CSS 库让整个界面变得更加友好。
