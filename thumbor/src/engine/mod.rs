@@ -1,7 +1,7 @@
 use image::ImageOutputFormat;
 mod photon;
-pub use photon::Photon;
 use crate::Spec;
+pub use photon::Photon;
 
 // Engine trait: 未来可以添加更多的 spec，只需要实现它即可
 pub trait Engine {
@@ -16,9 +16,3 @@ pub trait SpecTransform<T> {
     // 对图片使用 op 做transform
     fn transform(&mut self, op: T);
 }
-
-
-
-
-
-

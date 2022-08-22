@@ -6,7 +6,6 @@ use std::convert::TryFrom;
 mod abi; // 声明 abi.rs
 pub use abi::*;
 
-
 impl ImageSpec {
     pub fn new(specs: Vec<Spec>) -> Self {
         Self { specs }
@@ -61,38 +60,37 @@ impl From<resize::SampleFilter> for SamplingFilter {
 impl Spec {
     pub fn new_resize(width: u32, height: u32, filter: resize::SampleFilter) -> Self {
         Self {
-            data: Some(spec::Data::Resize(Resize{
+            data: Some(spec::Data::Resize(Resize {
                 width,
                 height,
                 rtype: resize::ResizeType::Normal as i32,
                 filter: filter as i32,
-            }))
+            })),
         }
     }
 
     pub fn new_resize_seam_carve(width: u32, height: u32) -> Self {
-        Self { data: Some(spec::Data::Resize(Resize{
-            width,
-            height,
-            rtype: resize::ResizeType::SeamCarve as i32,
-            filter: resize::SampleFilter::Undefined as i32,
-        }))}
+        Self {
+            data: Some(spec::Data::Resize(Resize {
+                width,
+                height,
+                rtype: resize::ResizeType::SeamCarve as i32,
+                filter: resize::SampleFilter::Undefined as i32,
+            })),
+        }
     }
 
     pub fn new_filter(filter: filter::Filter) -> Self {
         Self {
-            data: Some(spec::Data::Filter(Filter{
-                filter: filter as i32
-            }))
+            data: Some(spec::Data::Filter(Filter {
+                filter: filter as i32,
+            })),
         }
     }
 
     pub fn new_watermark(x: u32, y: u32) -> Self {
         Self {
-            data: Some(spec::Data::Watermark(Watermark {
-                x,
-                y,
-            }))
+            data: Some(spec::Data::Watermark(Watermark { x, y })),
         }
     }
 }
@@ -112,21 +110,3 @@ mod tests {
         assert_eq!(image_spec, s.as_str().try_into().unwrap());
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

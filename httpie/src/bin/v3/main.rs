@@ -1,9 +1,9 @@
-use clap::{AppSettings,Parser};
-use anyhow::{anyhow,Result};
-use reqwest::{header, Client, Response, Url};
-use std::{collections::HashMap, str::FromStr};
+use anyhow::{anyhow, Result};
+use clap::{AppSettings, Parser};
 use colored::Colorize;
 use mime::Mime;
+use reqwest::{header, Client, Response, Url};
+use std::{collections::HashMap, str::FromStr};
 
 // https://docs.rs/clap/latest/clap/
 // 定义 httpie 的 CLI 的主入口，它包含若干个子命令
@@ -14,8 +14,8 @@ use mime::Mime;
 #[clap(version = "1.0", author = "fufeng <luochunyun1995@gmail.com>")]
 #[clap(setting = AppSettings::ColoredHelp)]
 #[clap(author, version, about, long_about = None)]
-struct  Opts {
-    #[clap(subcommand) ]
+struct Opts {
+    #[clap(subcommand)]
     subcmd: SubCommand,
 }
 
@@ -64,7 +64,7 @@ impl FromStr for KvPair {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         // 使用 = 进行  ，这会得到一个迭代器
-        let mut  split = s.split("=");
+        let mut split = s.split("=");
         let err = || anyhow!(format!("Failed to parse {}", s));
         Ok(Self {
             // 从迭代器中取第一个结果作为 key，迭代器返回 Some(T)/None
@@ -110,7 +110,7 @@ async fn get(client: Client, args: &Get) -> Result<()> {
 async fn post(client: Client, args: &Post) -> Result<()> {
     let mut body = HashMap::new();
     for pair in args.body.iter() {
-        body.insert(&pair.k,&pair.v);
+        body.insert(&pair.k, &pair.v);
     }
     let resp = client.post(&args.url).json(&body).send().await?;
     Ok(print_resp(resp).await?)
@@ -141,7 +141,7 @@ fn print_body(m: Option<Mime>, body: &String) {
             println!("{}", jsonxf::pretty_print(body).unwrap().cyan())
         }
         // 其他类型的 mime type, 直接输出
-        _ => println!("{}", body)
+        _ => println!("{}", body),
     }
 }
 
@@ -172,9 +172,7 @@ async fn main() -> Result<()> {
     headers.insert(header::USER_AGENT, "Rust Httpie".parse()?);
 
     // 生成一个HTTP客户端
-    let client = Client::builder()
-        .default_headers(headers)
-        .build()?;
+    let client = Client::builder().default_headers(headers).build()?;
     let result = match opts.subcmd {
         SubCommand::Get(ref args) => get(client, args).await?,
         SubCommand::Post(ref args) => post(client, args).await?,
@@ -215,15 +213,17 @@ mod tests {
     fn parse_kv_pair_works() {
         assert!(parse_kv_pair("a").is_err());
 
-        assert_eq!(parse_kv_pair("a=1").unwrap(),
-            KvPair{
+        assert_eq!(
+            parse_kv_pair("a=1").unwrap(),
+            KvPair {
                 k: "a".into(),
                 v: "1".into()
             }
         );
 
-        assert_eq!(parse_kv_pair("b=").unwrap(),
-            KvPair{
+        assert_eq!(
+            parse_kv_pair("b=").unwrap(),
+            KvPair {
                 k: "b".into(),
                 v: "".into()
             }

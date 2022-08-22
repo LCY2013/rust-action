@@ -2,19 +2,20 @@ use anyhow::Result;
 use axum::{
     extract::{Extension, Path},
     http::{HeaderMap, HeaderValue, StatusCode},
-    routing::get, Router,
+    routing::get,
+    Router,
 };
 use bytes::Bytes;
 use lru::LruCache;
 use percent_encoding::{percent_decode_str, percent_encode, NON_ALPHANUMERIC};
 use serde::Deserialize;
+use std::borrow::Borrow;
 use std::{
     collections::hash_map::DefaultHasher,
     convert::TryInto,
     hash::{Hash, Hasher},
     sync::Arc,
 };
-use std::borrow::Borrow;
 use tokio::sync::Mutex;
 use tower::ServiceBuilder;
 use tower_http::add_extension::AddExtensionLayer;
@@ -28,8 +29,6 @@ use pb::*;
 mod engine;
 use engine::{Engine, Photon};
 use image::ImageOutputFormat;
-
-
 
 // 参数使用 serde 做 Deserialize，axum 会自动识别并解析
 #[derive(Deserialize)]
@@ -125,9 +124,9 @@ async fn retrieve_image(url: &str, cache: Cache) -> Result<Bytes> {
 // 调试辅助函数
 fn print_test_url(url: &str) {
     let spec1 = Spec::new_resize(500, 800, resize::SampleFilter::CatmullRom);
-    let spec2  = Spec::new_watermark(50,50);
+    let spec2 = Spec::new_watermark(50, 50);
     let spec3 = Spec::new_filter(filter::Filter::Marine);
-    let image_spec = ImageSpec::new(vec![spec1, spec2,spec3]);
+    let image_spec = ImageSpec::new(vec![spec1, spec2, spec3]);
     let s: String = image_spec.borrow().into();
     let test_image = percent_encode(url.as_bytes(), NON_ALPHANUMERIC).to_string();
     println!("test url: http://localhost:3000/image/{}/{}", s, test_image);

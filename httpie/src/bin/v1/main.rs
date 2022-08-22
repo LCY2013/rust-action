@@ -1,4 +1,4 @@
-use clap::{AppSettings,Parser};
+use clap::{AppSettings, Parser};
 
 // https://docs.rs/clap/latest/clap/
 // 定义 httpie 的 CLI 的主入口，它包含若干个子命令
@@ -9,8 +9,8 @@ use clap::{AppSettings,Parser};
 #[clap(version = "1.0", author = "fufeng <luochunyun1995@gmail.com>")]
 #[clap(setting = AppSettings::ColoredHelp)]
 #[clap(author, version, about, long_about = None)]
-struct  Opts {
-    #[clap(subcommand) ]
+struct Opts {
+    #[clap(subcommand)]
     subcmd: SubCommand,
 }
 
@@ -61,7 +61,3 @@ fn main() {
 
 // 《加入校验信息》
 // 一是验证 URL，另一个是验证 body。
-
-
-
-

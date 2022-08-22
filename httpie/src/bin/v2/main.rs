@@ -1,7 +1,7 @@
-use clap::{AppSettings,Parser};
+use anyhow::{anyhow, Result};
+use clap::{AppSettings, Parser};
 use reqwest::Url;
 use std::str::FromStr;
-use anyhow::{anyhow,Result};
 
 // https://docs.rs/clap/latest/clap/
 // 定义 httpie 的 CLI 的主入口，它包含若干个子命令
@@ -12,8 +12,8 @@ use anyhow::{anyhow,Result};
 #[clap(version = "1.0", author = "fufeng <luochunyun1995@gmail.com>")]
 #[clap(setting = AppSettings::ColoredHelp)]
 #[clap(author, version, about, long_about = None)]
-struct  Opts {
-    #[clap(subcommand) ]
+struct Opts {
+    #[clap(subcommand)]
     subcmd: SubCommand,
 }
 
@@ -62,7 +62,7 @@ impl FromStr for KvPair {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         // 使用 = 进行  ，这会得到一个迭代器
-        let mut  split = s.split("=");
+        let mut split = s.split("=");
         let err = || anyhow!(format!("Failed to parse {}", s));
         Ok(Self {
             // 从迭代器中取第一个结果作为 key，迭代器返回 Some(T)/None

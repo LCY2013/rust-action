@@ -865,3 +865,29 @@ members = [
 ]
 ```
 
+## Python
+在 workspace 的根目录下， cargo new queryer-py --lib ，生成一个新的 crate。在 queryer-py 下，编辑 Cargo.toml：
+```toml
+[package]
+name = "queryer-py"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib"] # 使用 cdylib 类型
+
+[dependencies]
+queryer = { path = "../queryer" } # 引入 queryer
+tokio = { version = "1", features = ["full"] }
+
+[dependencies.pyo3] # 引入 pyo3
+version = "0.14"
+features = ["extension-module"]
+
+[build-dependencies]
+pyo3-build-config = "0.14"
+```
+
+

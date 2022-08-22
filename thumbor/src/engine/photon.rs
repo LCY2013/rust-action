@@ -1,14 +1,14 @@
 use super::{Engine, SpecTransform};
 use crate::pb::*;
 use anyhow::Result;
+use bytes::Bytes;
 use image::{DynamicImage, ImageBuffer, ImageOutputFormat};
 use lazy_static::lazy_static;
 use photon_rs::{
     effects, filters, multiple, native::open_image_from_bytes, transform, PhotonImage,
 };
 use std::convert::TryFrom;
-use std::io::{Cursor};
-use bytes::Bytes;
+use std::io::Cursor;
 lazy_static! {
     // 预先把水印文件加载为静态变量
     static ref WATERMARK: PhotonImage = {
@@ -107,6 +107,8 @@ fn image_to_buf(img: PhotonImage, format: ImageOutputFormat) -> Vec<u8> {
     let img_buffer = ImageBuffer::from_vec(width, height, raw_pixels).unwrap();
     let dyn_image = DynamicImage::ImageRgba8(img_buffer);
     let mut buffer: Vec<u8> = Vec::with_capacity(32768);
-    dyn_image.write_to(&mut Cursor::new(&mut buffer), format).unwrap();
+    dyn_image
+        .write_to(&mut Cursor::new(&mut buffer), format)
+        .unwrap();
     buffer
 }
