@@ -22,5 +22,6 @@ members = [
     "thumbor",
     "queryer",
     "queryer-py",
-    "queryer-js"
+    "queryer-js",
+    "queryer-viewer/app/src-tauri"
 ]

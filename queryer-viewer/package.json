@@ -1,0 +1,12 @@
+{
+  "name": "app",
+  "scripts": {
+    "tauri": "tauri dev"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^1.0.5"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^1.0.0"
+  }
+}
