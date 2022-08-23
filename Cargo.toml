@@ -21,6 +21,6 @@ members = [
     "httpie",
     "thumbor",
     "queryer",
-    "queryer-py"
-#    "queryer-js"
+    "queryer-py",
+    "queryer-js"
 ]
