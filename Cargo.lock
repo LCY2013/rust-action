@@ -2245,7 +2245,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "queryer-py"
+name = "queryer_py"
 version = "0.1.0"
 dependencies = [
  "pyo3",

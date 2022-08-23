@@ -869,7 +869,7 @@ members = [
 在 workspace 的根目录下， cargo new queryer-py --lib ，生成一个新的 crate。在 queryer-py 下，编辑 Cargo.toml：
 ```toml
 [package]
-name = "queryer-py"
+name = "queryer_py"
 version = "0.1.0"
 edition = "2021"
 

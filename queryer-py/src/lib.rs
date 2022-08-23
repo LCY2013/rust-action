@@ -1,3 +1,4 @@
+#![allow(clippy::needless_option_as_deref)]
 use pyo3::{exceptions, prelude::*};
 
 #[pyfunction]
@@ -17,8 +18,8 @@ pub fn query(sql: &str, output: Option<&str>) -> PyResult<String> {
     }
 }
 
-#[pyfunction]
-fn query_py(_py: Python, m: &PyModule) -> PyResult<()> {
+#[pymodule]
+fn queryer_py(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(query, m)?)?;
     m.add_function(wrap_pyfunction!(example_sql, m)?)?;
     Ok(())
