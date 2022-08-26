@@ -7,3 +7,5 @@ pub mod pattern_matching;
 pub mod process_control;
 pub mod io;
 pub mod variables;
+pub mod collection;
+pub mod copymove;
