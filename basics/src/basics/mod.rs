@@ -9,3 +9,4 @@ pub mod io;
 pub mod variables;
 pub mod collection;
 pub mod copymove;
+pub mod borrow;
