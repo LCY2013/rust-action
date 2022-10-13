@@ -275,7 +275,18 @@ Mutex 和 RwLock 都用在多线程环境下，对共享数据访问的保护上
 
 ![img.png](.image/rc_arc.png)
 
+## rust 所有权
+- clone() 函数的实现源码
 
+- 最小权限原则
+
+- Rc::new() 的源码
+
+- Arc 内部的引用计数使用了 Atomic Usize
+
+- Atomic Usize 是 usize 的原子类型： std::sync::atomic 的文档
+
+- 内部可变性：除了 RefCell  之外，Rust 还提供了 Cell。如果你想对 RefCell 和 Cell 进一步了解，可以看 Rust 标准库里cell 的文档。
 
 
 

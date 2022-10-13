@@ -53,7 +53,7 @@ impl MutNode {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
+    use std::sync::{Arc, RwLock};
     use super::*;
 
     #[test]
@@ -140,4 +140,5 @@ mod tests {
         node3.borrow_mut().downstream = Some(Rc::new(RefCell::new(node5)));
         println!("node1: {:?}, node2: {:?}", node1, node2);
     }
+
 }
