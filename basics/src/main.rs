@@ -1,6 +1,7 @@
 pub mod basics;
 pub mod engineering;
 pub mod ownership;
+pub mod lifecycle;
 
 use basics::io::*;
 use basics::*;
