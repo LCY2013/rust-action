@@ -1,12 +1,13 @@
 pub mod basics;
 pub mod engineering;
-pub mod ownership;
 pub mod lifecycle;
 pub mod memory;
+pub mod ownership;
+pub mod types;
 
+use crate::variables::let_tro;
 use basics::io::*;
 use basics::*;
-use crate::variables::let_tro;
 
 // cargo run -- https://www.rust-lang.org rust.md, 命令行信息
 fn main() {

@@ -1,7 +1,7 @@
-use std::io;
 use io::stdin;
-use std::cmp::Ordering;
 use rand::Rng;
+use std::cmp::Ordering;
+use std::io;
 
 pub fn guess_robustness() {
     let secret_number = rand::thread_rng().gen_range(1..100);
@@ -10,8 +10,7 @@ pub fn guess_robustness() {
     loop {
         println!("Guess the number: ");
         let mut guess = String::new();
-        stdin().read_line(&mut guess)
-            .expect("Error reading line");
+        stdin().read_line(&mut guess).expect("Error reading line");
 
         let guess: u32 = match guess.trim().parse() {
             Ok(num) => num,
@@ -24,7 +23,7 @@ pub fn guess_robustness() {
             Ordering::Equal => {
                 println!("You wind!");
                 break;
-            },
+            }
         }
     }
 }
@@ -36,11 +35,9 @@ pub fn guess_loop() {
     loop {
         println!("Guess the number: ");
         let mut guess = String::new();
-        stdin().read_line(&mut guess)
-            .expect("Error reading line");
+        stdin().read_line(&mut guess).expect("Error reading line");
 
-        let guess: u32 = guess.trim().parse()
-            .expect("Please enter a number");
+        let guess: u32 = guess.trim().parse().expect("Please enter a number");
 
         match guess.cmp(&secret_number) {
             Ordering::Less => println!("Too small!"),
@@ -48,7 +45,7 @@ pub fn guess_loop() {
             Ordering::Equal => {
                 println!("You wind!");
                 break;
-            },
+            }
         }
     }
 }
@@ -59,8 +56,7 @@ pub fn guess_convert() {
 
     println!("Guess the number：");
     let mut guess = String::new();
-    stdin().read_line(&mut guess)
-        .expect("Error reading line");
+    stdin().read_line(&mut guess).expect("Error reading line");
 
     // 类型转换
     // guess.trim().parse() 表达式上。表达式中的 guess 是包含输入的原 始 String 类型。
@@ -68,8 +64,7 @@ pub fn guess_convert() {
     // u32 只 能由数字字符转换，不过用户必须输入 enter 键才能让 read_line 返回，然而用户按下 enter 键时，会在字符串中增加一个换行（newline）符。
     // 例如，用户输入 5 并按下 enter， guess 看起来像这样： 5\n 。
     // \n 代表 “换行”，回车键。 trim 方法消除 \n ，只留下 5 。
-    let guess: u32 = guess.trim().parse()
-        .expect("Please enter a number");
+    let guess: u32 = guess.trim().parse().expect("Please enter a number");
 
     match guess.cmp(&secret_number) {
         Ordering::Less => println!("Too small!"),
@@ -85,8 +80,7 @@ pub fn guess_tips() {
     println!("Please input the number");
     let mut guess = String::new();
 
-    stdin().read_line(&mut guess)
-        .expect("Error reading");
+    stdin().read_line(&mut guess).expect("Error reading");
 
     println!("You guessed: {}", guess);
 
@@ -102,8 +96,7 @@ pub fn guess() {
     println!("Please input the number.");
     let mut guess = String::new();
 
-    stdin().read_line(&mut guess)
-        .expect("Error reading");
+    stdin().read_line(&mut guess).expect("Error reading");
 
     println!("You guess: {}", guess)
 }
@@ -124,8 +117,7 @@ pub fn rand() {
 
     let mut guess = String::new();
 
-    stdin().read_line(&mut guess)
-        .expect("Failed to read line!");
+    stdin().read_line(&mut guess).expect("Failed to read line!");
 
     println!("You guessed: {}", guess)
 }

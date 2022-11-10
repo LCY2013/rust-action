@@ -30,7 +30,7 @@ impl<'a> Fetch for FileFetcher<'a> {
     type Error = anyhow::Error;
 
     async fn fetch(&self) -> Result<String, Self::Error> {
-       Ok(fs::read_to_string(&self.0[7..]).await?)
+        Ok(fs::read_to_string(&self.0[7..]).await?)
     }
 }
 
@@ -39,6 +39,6 @@ impl<'a> Fetch for UrlFetcher<'a> {
     type Error = anyhow::Error;
 
     async fn fetch(&self) -> Result<String, Self::Error> {
-       Ok(reqwest::get(self.0).await?.text().await?)
+        Ok(reqwest::get(self.0).await?.text().await?)
     }
 }

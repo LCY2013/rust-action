@@ -8,7 +8,6 @@ struct Node {
 }
 
 impl Node {
-
     pub fn new(id: usize) -> Self {
         Self {
             id,
@@ -21,9 +20,8 @@ impl Node {
     }
 
     pub fn get_downstream(&self) -> Option<Rc<Node>> {
-        self.downstream.as_ref().map(|v|v.clone())
+        self.downstream.as_ref().map(|v| v.clone())
     }
-
 }
 
 #[derive(Debug)]
@@ -33,7 +31,6 @@ struct MutNode {
 }
 
 impl MutNode {
-
     pub fn new(id: usize) -> Self {
         Self {
             id,
@@ -46,15 +43,14 @@ impl MutNode {
     }
 
     pub fn get_downstream(&self) -> Option<Rc<RefCell<MutNode>>> {
-        self.downstream.as_ref().map(|v | v.clone())
+        self.downstream.as_ref().map(|v| v.clone())
     }
-
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, RwLock};
     use super::*;
+    use std::sync::{Arc, RwLock};
 
     #[test]
     pub fn test_node() {
@@ -140,5 +136,4 @@ mod tests {
         node3.borrow_mut().downstream = Some(Rc::new(RefCell::new(node5)));
         println!("node1: {:?}, node2: {:?}", node1, node2);
     }
-
 }

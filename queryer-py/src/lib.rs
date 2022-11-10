@@ -9,11 +9,12 @@ pub fn example_sql() -> PyResult<String> {
 #[pyfunction]
 pub fn query(sql: &str, output: Option<&str>) -> PyResult<String> {
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let data = rt.block_on(async { queryer::query(sql).await.unwrap()});
+    let data = rt.block_on(async { queryer::query(sql).await.unwrap() });
     match output {
-       Some("csv") | None => Ok(data.to_csv().unwrap()),
+        Some("csv") | None => Ok(data.to_csv().unwrap()),
         Some(v) => Err(exceptions::PyTypeError::new_err(format!(
-            "Output type {} not supported", v
+            "Output type {} not supported",
+            v
         ))),
     }
 }
@@ -30,6 +31,5 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-    }
+    fn it_works() {}
 }

@@ -19,5 +19,3 @@ pub fn let_var_tro() {
     //let mut spaces = " ";
     //spaces = spaces.len();
 }
-
-

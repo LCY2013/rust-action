@@ -1,7 +1,7 @@
-use std::io::Cursor;
+use crate::DataSet;
 use anyhow::Result;
 use polars::prelude::*;
-use crate::DataSet;
+use std::io::Cursor;
 
 pub trait Load {
     type Error;

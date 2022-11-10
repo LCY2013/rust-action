@@ -1,5 +1,5 @@
-use queryer::query;
 use anyhow::Result;
+use queryer::query;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -9,7 +9,7 @@ async fn main() -> Result<()> {
     let url = "file:////Users/magicLuoMacBook/Downloads/owid-covid-latest.csv";
 
     // 使用sql 从 URL 里面获取数据
-    let sql  = format!(
+    let sql = format!(
         "SELECT location name, total_cases, new_cases, total_deaths, new_deaths \
         FROM {} where new_deaths >= 500 ORDER BY new_cases DESC",
         url

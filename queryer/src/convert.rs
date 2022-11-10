@@ -31,7 +31,7 @@ impl<'a> TryFrom<&'a Statement> for Sql<'a> {
 
     fn try_from(sql: &'a Statement) -> Result<Self, Self::Error> {
         match sql {
-         // 目前先只实现query （select ... from ... where ...）
+            // 目前先只实现query （select ... from ... where ...）
             Statement::Query(q) => {
                 let offset = q.offset.as_ref();
                 let limit = q.limit.as_ref();
@@ -88,21 +88,20 @@ impl TryFrom<Expression> for Expr {
     type Error = anyhow::Error;
 
     fn try_from(expr: Expression) -> Result<Self, Self::Error> {
-       match *expr.0 {
-           SqlExpr::BinaryOp { left,op,right } => Ok(Expr::BinaryExpr {
-               left: Box::new(Expression(left).try_into()?),
-               op: Operation(op).try_into()?,
-               right: Box::new(Expression(right).try_into()?),
-           }),
-           SqlExpr::IsNull(expr) => Ok(Self::IsNull(Box::new(Expression(expr).try_into()?))),
-           SqlExpr::IsNotNull(expr) => Ok(Self::IsNotNull(Box::new(Expression(expr).try_into()?))),
-           SqlExpr::Identifier(id) => Ok(Self::Column(Arc::new(id.value))),
-           SqlExpr::Value(v) => Ok(Self::Literal(Value(v).try_into()?)),
-           v => Err(anyhow!("expr {:#?} is not support", v)),
-       }
+        match *expr.0 {
+            SqlExpr::BinaryOp { left, op, right } => Ok(Expr::BinaryExpr {
+                left: Box::new(Expression(left).try_into()?),
+                op: Operation(op).try_into()?,
+                right: Box::new(Expression(right).try_into()?),
+            }),
+            SqlExpr::IsNull(expr) => Ok(Self::IsNull(Box::new(Expression(expr).try_into()?))),
+            SqlExpr::IsNotNull(expr) => Ok(Self::IsNotNull(Box::new(Expression(expr).try_into()?))),
+            SqlExpr::Identifier(id) => Ok(Self::Column(Arc::new(id.value))),
+            SqlExpr::Value(v) => Ok(Self::Literal(Value(v).try_into()?)),
+            v => Err(anyhow!("expr {:#?} is not support", v)),
+        }
     }
 }
-
 
 /// 把 SqlParser 的 BinaryOperator 转换成 DataFrame 的 Operator
 impl TryFrom<Operation> for Operator {
@@ -164,8 +163,8 @@ impl<'a> TryFrom<Source<'a>> for &'a str {
         }
 
         match &table.relation {
-            TableFactor::Table {name, .. } => Ok(&name.0.first().unwrap().value),
-            _ => Err(anyhow!("We only support table"))
+            TableFactor::Table { name, .. } => Ok(&name.0.first().unwrap().value),
+            _ => Err(anyhow!("We only support table")),
         }
     }
 }
@@ -207,7 +206,7 @@ impl<'a> From<Limit<'a>> for usize {
     fn from(limit: Limit<'a>) -> Self {
         match limit.0 {
             SqlExpr::Value(SqlValue::Number(v, _b)) => v.parse().unwrap_or(usize::MAX),
-            _ => usize::MAX
+            _ => usize::MAX,
         }
     }
 }
@@ -218,19 +217,19 @@ impl TryFrom<Value> for LiteralValue {
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value.0 {
-           SqlValue::Number(v, _) => Ok(LiteralValue::Float64(v.parse().unwrap())),
-           SqlValue::Boolean(v) => Ok(LiteralValue::Boolean(v)),
-           SqlValue::Null => Ok(LiteralValue::Null),
-           v => Err(anyhow!("Value {} is not supported", v))
+            SqlValue::Number(v, _) => Ok(LiteralValue::Float64(v.parse().unwrap())),
+            SqlValue::Boolean(v) => Ok(LiteralValue::Boolean(v)),
+            SqlValue::Null => Ok(LiteralValue::Null),
+            v => Err(anyhow!("Value {} is not supported", v)),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use sqlparser::parser::Parser;
-    use crate::dialect::TyrDialect;
     use super::*;
+    use crate::dialect::TyrDialect;
+    use sqlparser::parser::Parser;
 
     #[test]
     fn parse_sql_works() {
@@ -249,7 +248,3 @@ mod tests {
         assert_eq!(sql.selection, vec![col("a"), col("b"), col("c")]);
     }
 }
-
-
-
-

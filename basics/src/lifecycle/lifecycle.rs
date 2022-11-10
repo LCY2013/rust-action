@@ -6,7 +6,11 @@
 
 /// compare string
 fn max_correct<'a>(s1: &'a str, s2: &'a str) -> &'a str {
-    if s1 > s2 { s1 } else { s2 }
+    if s1 > s2 {
+        s1
+    } else {
+        s2
+    }
 }
 
 /// get max

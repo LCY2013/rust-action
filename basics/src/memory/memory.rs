@@ -43,7 +43,7 @@ macro_rules! show_size {
             size_of::<Option<$t>>(),
             size_of::<Result<$t, std::io::Error>>(),
         )
-    }
+    };
 }
 
 #[derive(Default)]
@@ -60,15 +60,20 @@ struct Align2 {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::fs::File;
     use std::io::Write;
-    use super::*;
 
     #[test]
     fn test_mem_padding() {
         println!("sizeof S1: {}, S2: {}", size_of::<S1>(), size_of::<S2>());
         println!("alignof S1: {}, S2: {}", align_of::<S1>(), align_of::<S2>());
-        println!("sizeof S1: {}, S2: {}, S3: {}", size_of::<S1>(), size_of::<S2>(), size_of::<S3>());
+        println!(
+            "sizeof S1: {}, S2: {}, S3: {}",
+            size_of::<S1>(),
+            size_of::<S2>(),
+            size_of::<S3>()
+        );
     }
 
     #[test]
@@ -110,6 +115,4 @@ mod tests {
         println!("Align1.c: {:p}", &a.c);
         println!("Align2.a: {:p}", &b.a);
     }
-
 }
-

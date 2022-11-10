@@ -56,9 +56,9 @@ mod tests {
 
     #[test]
     fn it_works() {
-       let data = vec![1, 2, 3, 4, 5];
+        let data = vec![1, 2, 3, 4, 5];
 
-       let buf: RawBuffer = data.into();
+        let buf: RawBuffer = data.into();
 
         // 因为 buf 允许 Copy，所以这里 Copy 了一份
         use_buffer(buf);
@@ -66,5 +66,4 @@ mod tests {
         // buf 还能用
         println!("buf: {:?}", buf);
     }
-
 }

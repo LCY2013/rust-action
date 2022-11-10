@@ -1,16 +1,16 @@
-use std::ops::{Deref, DerefMut};
-use anyhow::{anyhow, Result};
-use polars::prelude::*;
-use sqlparser::parser::Parser;
-use tracing::info;
 use crate::convert::Sql;
 use crate::fetcher::retrieve_data;
 use crate::loader::detect_content;
+use anyhow::{anyhow, Result};
+use polars::prelude::*;
+use sqlparser::parser::Parser;
+use std::ops::{Deref, DerefMut};
+use tracing::info;
 
 mod convert;
 mod dialect;
-mod loader;
 mod fetcher;
+mod loader;
 
 pub use dialect::example_sql;
 pub use dialect::TyrDialect;
@@ -36,7 +36,6 @@ impl DerefMut for DataSet {
 
 /// 实现 DataSet 自己的方法
 impl DataSet {
-
     /// 从 DataSet 转换成 csv
     pub fn to_csv(&self) -> Result<String> {
         let mut buf = Vec::new();
@@ -44,7 +43,6 @@ impl DataSet {
         writer.finish(self)?;
         Ok(String::from_utf8(buf)?)
     }
-
 }
 
 /// 从 from 中获取数据，从 where 中过滤，最后选取需要返回的列

@@ -1,10 +1,9 @@
-
 #[cfg(test)]
 mod tests {
     use std::borrow::{Borrow, BorrowMut};
     use std::cell::RefCell;
     use std::sync::{Arc, Mutex, RwLock};
-    use std::thread::{JoinHandle, sleep};
+    use std::thread::{sleep, JoinHandle};
     use std::time::Duration;
 
     #[test]
@@ -33,11 +32,16 @@ mod tests {
         let shared_str_buf = shared_str.clone();
 
         std::thread::spawn(move || {
-            println!("shared_str: {:?}", shared_str.lock().unwrap().push(String::from("foo")));
+            println!(
+                "shared_str: {:?}",
+                shared_str.lock().unwrap().push(String::from("foo"))
+            );
         });
         //std::time::sleep(Duration::from_secs(5));
         sleep(Duration::from_secs(1));
-        println!("shared_str: {:?}", shared_str_buf.lock().unwrap().pop().unwrap());
+        println!(
+            "shared_str: {:?}",
+            shared_str_buf.lock().unwrap().pop().unwrap()
+        );
     }
-
 }

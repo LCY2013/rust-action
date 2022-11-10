@@ -1,12 +1,12 @@
+pub mod borrow;
 pub mod closure;
+pub mod collection;
+pub mod copymove;
 pub mod data_structure;
 pub mod err_handling;
 pub mod func;
 pub mod func_return;
+pub mod io;
 pub mod pattern_matching;
 pub mod process_control;
-pub mod io;
 pub mod variables;
-pub mod collection;
-pub mod copymove;
-pub mod borrow;

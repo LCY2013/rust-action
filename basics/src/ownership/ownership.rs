@@ -1,4 +1,3 @@
-
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
@@ -17,6 +16,4 @@ mod tests {
         let c = a.clone();
         println!("a: {},b: {}, c: {}", a, b, c);
     }
-
 }
-
